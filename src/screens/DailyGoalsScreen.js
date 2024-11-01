@@ -1,19 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput } from 'react-native';
 import styled from 'styled-components/native';
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DailyGoalsScreen = ({ navigation, route }) => {
   const { totalTasks, completedTasks } = route.params;
   const [reportVisible, setReportVisible] = useState(false);
-  const [goals, setGoals] = useState([
-    { text: 'Alcançar Metas', priority: 'Alta' },
-    { text: 'Focar nos Estudos', priority: 'Média' },
-    { text: 'Ficar Calmo', priority: 'Baixa' },
-  ]);
-
+  const [goals, setGoals] = useState([]);
   const [filter, setFilter] = useState(null); // Filtro para prioridades
   const [newGoal, setNewGoal] = useState(''); // Texto da nova meta
+
+  // Carrega as metas do armazenamento ao iniciar o aplicativo
+  useEffect(() => {
+    loadGoals();
+  }, []);
+
+  const loadGoals = async () => {
+    try {
+      const storedGoals = await AsyncStorage.getItem('goals');
+      if (storedGoals) {
+        setGoals(JSON.parse(storedGoals));
+      }
+    } catch (error) {
+      console.error("Erro ao carregar metas", error);
+    }
+  };
+
+  const saveGoals = async (updatedGoals) => {
+    try {
+      await AsyncStorage.setItem('goals', JSON.stringify(updatedGoals));
+    } catch (error) {
+      console.error("Erro ao salvar metas", error);
+    }
+  };
 
   const generateReport = () => {
     setReportVisible(true);
@@ -25,7 +45,9 @@ const DailyGoalsScreen = ({ navigation, route }) => {
 
   const addGoal = () => {
     if (newGoal.trim() && filter) {
-      setGoals([...goals, { text: newGoal, priority: filter }]);
+      const updatedGoals = [...goals, { text: newGoal, priority: filter }];
+      setGoals(updatedGoals);
+      saveGoals(updatedGoals); // Salva as metas no AsyncStorage
       setNewGoal('');
     }
   };
@@ -227,11 +249,6 @@ const AddGoalButton = styled.TouchableOpacity`
   background-color: #50fa7b;
   padding: 10px 15px;
   border-radius: 8px;
-`;
-
-const AddGoalText = styled.Text`
-  color: #ffffff;
-  font-weight: bold;
 `;
 
 const HomeButton = styled.TouchableOpacity`
