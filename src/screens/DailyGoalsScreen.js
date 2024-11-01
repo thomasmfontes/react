@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput } from 'react-native';
 import styled from 'styled-components/native';
 import { Ionicons } from '@expo/vector-icons'; 
 
 const DailyGoalsScreen = ({ navigation, route }) => {
   const { totalTasks, completedTasks } = route.params;
   const [reportVisible, setReportVisible] = useState(false);
+  const [goals, setGoals] = useState([
+    { text: 'Alcançar Metas', priority: 'Alta' },
+    { text: 'Focar nos Estudos', priority: 'Média' },
+    { text: 'Ficar Calmo', priority: 'Baixa' },
+  ]);
+
+  const [filter, setFilter] = useState(null); // Filtro para prioridades
+  const [newGoal, setNewGoal] = useState(''); // Texto da nova meta
 
   const generateReport = () => {
     setReportVisible(true);
@@ -15,59 +23,64 @@ const DailyGoalsScreen = ({ navigation, route }) => {
     setReportVisible(false);
   };
 
-  const getFeedbackMessage = () => {
-    if (completedTasks === totalTasks) {
-      return "Parabéns! Você concluiu todos os objetivos do dia. Excelente trabalho!";
-    } else if (completedTasks > totalTasks * 0.6) {
-      return "Ótimo desempenho! Você concluiu a maioria das metas. Continue assim!";
-    } else {
-      return "Você completou algumas metas, mas há espaço para melhorar.";
+  const addGoal = () => {
+    if (newGoal.trim() && filter) {
+      setGoals([...goals, { text: newGoal, priority: filter }]);
+      setNewGoal('');
     }
-  };
-
-  // Estado das metas com prioridades que podem ser alteradas pelo usuário
-  const [goals, setGoals] = useState([
-    { text: 'Alcançar Metas', priority: 'Alta' },
-    { text: 'Focar nos Estudos', priority: 'Média' },
-    { text: 'Ficar Calmo', priority: 'Baixa' },
-  ]);
-
-  // Função para alterar a prioridade
-  const handlePriorityChange = (index, newPriority) => {
-    const updatedGoals = [...goals];
-    updatedGoals[index].priority = newPriority;
-    setGoals(updatedGoals);
   };
 
   return (
     <Container>
       <Title>Objetivos do Dia</Title>
 
-      <ProgressIndicator totalTasks={totalTasks} completedTasks={completedTasks}/>
-      
-      <GoalList>
-        {goals.map((goal, index) => (
-          <GoalItem key={index}>
-            <GoalText>{goal.text}</GoalText>
-            <PriorityTagContainer>
-              {['Alta', 'Média', 'Baixa'].map((priority) => (
-                <TouchableOpacity
-                  key={priority}
-                  onPress={() => handlePriorityChange(index, priority)}
-                >
-                  <PriorityTag priority={priority} selected={goal.priority === priority} />
-                </TouchableOpacity>
-              ))}
-            </PriorityTagContainer>
-          </GoalItem>
+      <ProgressIndicator totalTasks={totalTasks} completedTasks={completedTasks} />
+
+      {/* Filtro de Prioridade */}
+      <FilterContainer>
+        {['Alta', 'Média', 'Baixa'].map((priority) => (
+          <FilterTag
+            key={priority}
+            priority={priority}
+            isSelected={filter === priority}
+            onPress={() => setFilter(filter === priority ? null : priority)}
+          >
+            <FilterTagText isSelected={filter === priority}>{priority}</FilterTagText>
+          </FilterTag>
         ))}
+      </FilterContainer>
+
+      {/* Campo de Adição de Metas */}
+      {filter && (
+        <AddGoalContainer>
+          <GoalInput
+            placeholder={`Adicionar meta ${filter}`}
+            placeholderTextColor="#fff"
+            value={newGoal}
+            onChangeText={setNewGoal}
+          />
+          <AddGoalButton onPress={addGoal}>
+            <Ionicons name="add-circle" size={28} color="#1C2541" />
+          </AddGoalButton>
+        </AddGoalContainer>
+      )}
+
+      {/* Lista de Metas */}
+      <GoalList>
+        {goals
+          .filter((goal) => (filter ? goal.priority === filter : true))
+          .map((goal, index) => (
+            <GoalItem key={index}>
+              <GoalText>{goal.text}</GoalText>
+              <PriorityTag priority={goal.priority} />
+            </GoalItem>
+          ))}
       </GoalList>
 
+      {/* Botão e Modal do Relatório */}
       <HomeButton onPress={() => navigation.navigate('HomeTabs', { screen: 'Home' })}>
         <Ionicons name="arrow-back" size={28} color="#fff" />
       </HomeButton>
-
-      <DailySummary completedTasks={completedTasks} totalTasks={totalTasks} />
 
       <ReportButton onPress={generateReport}>
         <ButtonText>Gerar Relatório</ButtonText>
@@ -80,8 +93,6 @@ const DailyGoalsScreen = ({ navigation, route }) => {
             <ReportText>Tarefas Totais: {totalTasks}</ReportText>
             <ReportText>Tarefas Concluídas: {completedTasks}</ReportText>
             <ReportText>Tarefas Pendentes: {totalTasks - completedTasks}</ReportText>
-            <ReportText style={{ marginTop: 10 }}>Feedback:</ReportText>
-            <FeedbackText>{getFeedbackMessage()}</FeedbackText>
             <CloseButton onPress={closeReport}>
               <CloseButtonText>Fechar Relatório</CloseButtonText>
             </CloseButton>
@@ -92,40 +103,12 @@ const DailyGoalsScreen = ({ navigation, route }) => {
   );
 };
 
-// Definição de ProgressIndicator
-const ProgressIndicator = ({ totalTasks, completedTasks }) => {
-  const progress = totalTasks ? (completedTasks / totalTasks) * 100 : 0;
+// Estilos dos Componentes
 
-  return (
-    <View>
-      <Text style={styles.progressText}>Progresso: {completedTasks}/{totalTasks}</Text>
-      <ProgressContainer>
-        <ProgressBar progress={progress} />
-      </ProgressContainer>
-    </View>
-  );
-};
-
-// Estilos para ProgressIndicator e outros componentes
 const Container = styled.View`
   flex: 1;
   padding: 20px;
   background-color: #3A506B;
-`;
-
-const HomeButton = styled.TouchableOpacity`
-  background-color: #5BC0BE;
-  position: absolute;
-  top: 40px;
-  left: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 30px;
-  justify-content: center;
-  align-items: center;
-  shadow-color: #000;
-  shadow-opacity: 0.2;
-  shadow-radius: 5px;
 `;
 
 const Title = styled.Text`
@@ -137,46 +120,44 @@ const Title = styled.Text`
   margin-bottom: 20px;
 `;
 
+const ProgressIndicator = ({ totalTasks, completedTasks }) => {
+  const progress = totalTasks ? (completedTasks / totalTasks) * 100 : 0;
+  return (
+    <View>
+      <Text style={styles.progressText}>Progresso: {completedTasks}/{totalTasks}</Text>
+      <ProgressContainer>
+        <ProgressBar progress={progress} />
+      </ProgressContainer>
+    </View>
+  );
+};
+
 const GoalList = styled.ScrollView`
   margin-top: 20px;
 `;
 
 const GoalItem = styled.View`
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
   background-color: #1C2541;
   padding: 15px;
   margin-bottom: 12px;
   border-radius: 12px;
-  shadow-color: #000;
-  shadow-opacity: 0.15;
-  shadow-radius: 6px;
-  elevation: 3;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 `;
 
 const GoalText = styled.Text`
   font-size: 18px;
-  font-weight: 500;
   color: #F5F5F5;
-`;
-
-const PriorityTagContainer = styled.View`
-  flex-direction: row;
 `;
 
 const PriorityTag = styled.View`
   background-color: ${({ priority }) =>
     priority === 'Alta' ? '#E94F4F' : priority === 'Média' ? '#FFA500' : '#83E509'};
-  width: ${({ selected }) => (selected ? 24 : 16)}px;
-  height: ${({ selected }) => (selected ? 24 : 16)}px;
-  border-radius: ${({ selected }) => (selected ? 12 : 8)}px;
-  margin-right: 8px;
-  border-width: ${({ selected }) => (selected ? 2 : 0)}px;
-  border-color: ${({ selected }) => (selected ? '#000' : 'transparent')};
-  opacity: ${({ selected }) => (selected ? 1 : 0.5)};
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
 `;
-
 
 const ProgressContainer = styled.View`
   width: 100%;
@@ -194,27 +175,75 @@ const ProgressBar = styled.View`
   border-radius: 10px;
 `;
 
-const DailySummary = ({ completedTasks, totalTasks }) => (
-  <SummaryContainer>
-    <SummaryText>Hoje você completou {completedTasks} de {totalTasks} objetivos.</SummaryText>
-  </SummaryContainer>
-);
-
-const SummaryContainer = styled.View`
-  padding: 18px;
-  background-color: #2B3A4A;
+const FilterContainer = styled.View`
+  flex-direction: row;
+  justify-content: space-between;
   margin-top: 20px;
-  border-radius: 12px;
+`;
+
+const FilterTag = styled.TouchableOpacity`
+  padding: 10px 20px;
+  background-color: ${({ isSelected, priority }) =>
+    isSelected
+      ? priority === 'Alta'
+        ? '#ff5555'
+        : priority === 'Média'
+        ? '#ffaa00'
+        : '#50fa7b'
+      : '#44475a'};
+  border-radius: 30px;
+  margin-horizontal: 5px;
   shadow-color: #000;
-  shadow-opacity: 0.1;
-  shadow-radius: 5px;
+  shadow-opacity: 0.2;
+  shadow-radius: 6px;
   elevation: 3;
 `;
 
-const SummaryText = styled.Text`
+const FilterTagText = styled.Text`
+  color: ${({ isSelected }) => (isSelected ? '#1C2541' : '#fff')};
+  font-weight: bold;
   font-size: 16px;
-  color: #F5F5F5;
-  text-align: center;
+`;
+
+const AddGoalContainer = styled.View`
+  flex-direction: row;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background-color: #1c1e24;
+`;
+
+const GoalInput = styled.TextInput`
+  flex: 1;
+  background-color: #282a36;
+  color: #ffffff;
+  padding: 10px;
+  border-radius: 8px;
+  margin-right: 10px;
+`;
+
+const AddGoalButton = styled.TouchableOpacity`
+  background-color: #50fa7b;
+  padding: 10px 15px;
+  border-radius: 8px;
+`;
+
+const AddGoalText = styled.Text`
+  color: #ffffff;
+  font-weight: bold;
+`;
+
+const HomeButton = styled.TouchableOpacity`
+  background-color: #5BC0BE;
+  position: absolute;
+  top: 40px;
+  left: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 30px;
+  justify-content: center;
+  align-items: center;
 `;
 
 const ReportButton = styled.TouchableOpacity`
@@ -245,10 +274,6 @@ const ModalContent = styled.View`
   padding: 20px;
   border-radius: 10px;
   align-items: center;
-  shadow-color: #000;
-  shadow-opacity: 0.25;
-  shadow-radius: 10px;
-  elevation: 5;
 `;
 
 const ReportTitle = styled.Text`
@@ -263,14 +288,6 @@ const ReportText = styled.Text`
   color: #333;
   text-align: left;
   width: 100%;
-`;
-
-const FeedbackText = styled.Text`
-  font-size: 15px;
-  color: #4CAF50;
-  font-style: italic;
-  margin-top: 5px;
-  text-align: center;
 `;
 
 const CloseButton = styled.TouchableOpacity`
