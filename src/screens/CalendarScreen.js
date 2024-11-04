@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Modal, TouchableOpacity, TextInput, FlatList, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, TouchableOpacity, TextInput, FlatList, Animated, Alert } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import styled from 'styled-components/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const initialTasks = {
   '2024-08-01': [{ id: '1', text: 'Comprar leite' }],
@@ -10,30 +11,50 @@ const initialTasks = {
 
 export default function CalendarScreen() {
   const [modalVisible, setModalVisible] = useState(false);
+  const [viewTasksVisible, setViewTasksVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [tasks, setTasks] = useState(initialTasks);
   const [newTask, setNewTask] = useState('');
-  const [showTodayTasks, setShowTodayTasks] = useState(false);
-  const [dropdownHeight, setDropdownHeight] = useState(new Animated.Value(0));
-
-  const today = new Date().toISOString().split('T')[0];
+  const slideAnim = useRef(new Animated.Value(0)).current; // Valor de altura animado
 
   const handleDayPress = (day) => {
     setSelectedDate(day.dateString);
-    setModalVisible(true);
-    setShowTodayTasks(false);
+    setViewTasksVisible(false); // Fecha o dropdown ao selecionar uma nova data
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
   };
 
-  const handleAddTask = () => {
+  const handleToggleViewTasks = () => {
+    const newValue = viewTasksVisible ? 0 : 150; // Altura para expandir/recolher
+    setViewTasksVisible(!viewTasksVisible);
+    Animated.timing(slideAnim, {
+      toValue: newValue,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleAddTask = async () => {
     if (newTask.trim()) {
-      setTasks({
+      const updatedTasks = {
         ...tasks,
         [selectedDate]: [
           ...(tasks[selectedDate] || []),
           { id: String(Date.now()), text: newTask },
         ],
-      });
+      };
+      setTasks(updatedTasks);
       setNewTask('');
+
+      // Salva o estado atualizado no AsyncStorage
+      try {
+        await AsyncStorage.setItem('calendarTasks', JSON.stringify(updatedTasks));
+      } catch (error) {
+        console.error("Erro ao salvar as tarefas do calendário", error);
+      }
     }
   };
 
@@ -44,21 +65,19 @@ export default function CalendarScreen() {
     });
   };
 
-  const handleShowTodayTasks = () => {
-    setSelectedDate(today);
-    setShowTodayTasks(!showTodayTasks);
-    Animated.timing(dropdownHeight, {
-      toValue: showTodayTasks ? 0 : 200,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const renderNoTasksMessage = () => (
-    <NoTasksContainer>
-      <NoTasksText>Você não possui tarefas hoje.</NoTasksText>
-    </NoTasksContainer>
-  );
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        const storedTasks = await AsyncStorage.getItem('calendarTasks');
+        if (storedTasks) {
+          setTasks(JSON.parse(storedTasks));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar as tarefas do calendário", error);
+      }
+    };
+    loadTasks();
+  }, []);
 
   return (
     <Container>
@@ -74,69 +93,58 @@ export default function CalendarScreen() {
         }}
       />
 
-      <TodayTasksButton onPress={handleShowTodayTasks}>
-        <TodayTasksButtonText>Mostrar tarefas de hoje</TodayTasksButtonText>
-      </TodayTasksButton>
+      {/* Botões para adicionar e ver tarefas */}
+      <ButtonContainer>
+        <AddTaskButton onPress={() => setModalVisible(true)}>
+          <ButtonText>Adicionar Tarefa</ButtonText>
+        </AddTaskButton>
+        <ViewTasksButton onPress={handleToggleViewTasks}>
+          <ButtonText>{viewTasksVisible ? 'Ocultar Tarefas' : 'Ver Tarefas'}</ButtonText>
+        </ViewTasksButton>
+      </ButtonContainer>
 
-      <Animated.View style={{ height: dropdownHeight, overflow: 'hidden' }}>
+      {/* Dropdown de Tarefas com Efeito de Slide */}
+      <Animated.View style={{ height: slideAnim, overflow: 'hidden' }}>
         <DropdownContainer>
-          {tasks[today] && tasks[today].length > 0 ? (
-            <FlatList
-              data={tasks[today]}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TaskItem>
-                  <TaskText>{item.text}</TaskText>
-                  <RemoveButton onPress={() => handleRemoveTask(item.id)}>
-                    <RemoveButtonText>Excluir</RemoveButtonText>
-                  </RemoveButton>
-                </TaskItem>
-              )}
-            />
-          ) : (
-            renderNoTasksMessage()
-          )}
+          <FlatList
+            data={tasks[selectedDate] || []}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TaskItem>
+                <TaskText>{item.text}</TaskText>
+                <RemoveButton onPress={() => handleRemoveTask(item.id)}>
+                  <RemoveButtonText>Excluir</RemoveButtonText>
+                </RemoveButton>
+              </TaskItem>
+            )}
+            ListEmptyComponent={<EmptyText>Não há tarefas para esta data.</EmptyText>}
+          />
         </DropdownContainer>
       </Animated.View>
 
-      <Modal
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <ModalContainer>
-          <ModalContent>
-            <ModalTitle>Tarefas de {selectedDate}</ModalTitle>
-            <FlatList
-              data={tasks[selectedDate] || []}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TaskItem>
-                  <TaskText>{item.text}</TaskText>
-                  <RemoveButton onPress={() => handleRemoveTask(item.id)}>
-                    <RemoveButtonText>Excluir</RemoveButtonText>
-                  </RemoveButton>
-                </TaskItem>
-              )}
-            />
-            <NewTaskInput
-              placeholder="Adicionar nova tarefa"
-              placeholderTextColor="#B0B0B0"
-              value={newTask}
-              onChangeText={setNewTask}
-            />
-            <AddButton onPress={handleAddTask}>
-              <AddButtonText>Adicionar</AddButtonText>
-            </AddButton>
-            <CloseButton onPress={() => setModalVisible(false)}>
-              <CloseButtonText>Fechar</CloseButtonText>
-            </CloseButton>
-          </ModalContent>
-        </ModalContainer>
-      </Modal>
+      {/* Modal para adicionar nova tarefa */}
+      <ModalContainer visible={modalVisible} transparent={true}>
+        <ModalContent>
+          <ModalTitle>Nova Tarefa para {selectedDate}</ModalTitle>
+          <NewTaskInput
+            placeholder="Adicionar nova tarefa"
+            placeholderTextColor="#B0B0B0"
+            value={newTask}
+            onChangeText={setNewTask}
+          />
+          <AddButton onPress={handleAddTask}>
+            <AddButtonText>Adicionar</AddButtonText>
+          </AddButton>
+          <CloseButton onPress={() => setModalVisible(false)}>
+            <CloseButtonText>Fechar</CloseButtonText>
+          </CloseButton>
+        </ModalContent>
+      </ModalContainer>
     </Container>
   );
 }
+
+// Estilos dos Componentes
 
 const Container = styled.View`
   flex: 1;
@@ -144,34 +152,47 @@ const Container = styled.View`
   background-color: #3A506B;
 `;
 
-const ModalContainer = styled.View`
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.6);
+const ButtonContainer = styled.View`
+  flex-direction: row;
+  justify-content: space-around;
+  margin-top: 16px;
 `;
 
-const ModalContent = styled.View`
-  width: 90%;
-  max-height: 80%;
-  background-color: #F5F5F5;
+const AddTaskButton = styled.TouchableOpacity`
+  background-color: #66BB6A;
+  padding: 12px;
   border-radius: 10px;
-  padding: 20px;
-  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+  align-items: center;
+  width: 45%;
 `;
 
-const ModalTitle = styled.Text`
-  font-size: 22px;
+const ViewTasksButton = styled.TouchableOpacity`
+  background-color: #FFB6B9;
+  padding: 12px;
+  border-radius: 10px;
+  align-items: center;
+  width: 45%;
+`;
+
+const ButtonText = styled.Text`
+  color: #F5F5F5;
+  font-size: 16px;
   font-weight: bold;
-  margin-bottom: 16px;
-  color: #3A506B;
+`;
+
+const DropdownContainer = styled.View`
+  background-color: #FFFFFF;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
 `;
 
 const TaskItem = styled.View`
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
+  padding: 8px;
   border-bottom-width: 1px;
   border-bottom-color: #ECEFF1;
 `;
@@ -183,13 +204,36 @@ const TaskText = styled.Text`
 
 const RemoveButton = styled.TouchableOpacity`
   background-color: #EF5350;
-  padding: 8px 12px;
+  padding: 5px 10px;
   border-radius: 5px;
 `;
 
 const RemoveButtonText = styled.Text`
   color: #F5F5F5;
   font-size: 14px;
+`;
+
+const EmptyText = styled.Text`
+  text-align: center;
+  font-size: 14px;
+  color: #9E9E9E;
+  padding: 10px;
+`;
+
+const ModalContainer = styled.Modal``;
+
+const ModalContent = styled.View`
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.6);
+`;
+
+const ModalTitle = styled.Text`
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: #3A506B;
 `;
 
 const NewTaskInput = styled.TextInput`
@@ -223,36 +267,4 @@ const CloseButton = styled.TouchableOpacity`
 const CloseButtonText = styled.Text`
   color: #3A506B;
   font-size: 16px;
-`;
-
-const TodayTasksButton = styled.TouchableOpacity`
-  background-color: #FFB6B9;
-  padding: 12px;
-  border-radius: 10px;
-  align-items: center;
-  margin-top: 16px;
-`;
-
-const TodayTasksButtonText = styled.Text`
-  color: #F5F5F5;
-  font-size: 16px;
-  font-weight: bold;
-`;
-
-const DropdownContainer = styled.View`
-  background-color: #F5F5F5;
-  border-radius: 10px;
-  padding: 16px;
-  margin-top: 10px;
-  border: 1px solid #E0E0E0;
-`;
-
-const NoTasksContainer = styled.View`
-  padding: 16px;
-  align-items: center;
-`;
-
-const NoTasksText = styled.Text`
-  font-size: 16px;
-  color: #424242;
 `;
