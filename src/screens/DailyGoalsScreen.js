@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Animated, Easing } from 'react-native';
 import styled from 'styled-components/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PieChart } from 'react-native-chart-kit';
 
 const DailyGoalsScreen = ({ navigation, route }) => {
   const { totalTasks, completedTasks } = route.params;
   const [reportVisible, setReportVisible] = useState(false);
   const [goals, setGoals] = useState([]);
-  const [filter, setFilter] = useState(null); // Filtro para prioridades
-  const [newGoal, setNewGoal] = useState(''); // Texto da nova meta
+  const [filter, setFilter] = useState(null); 
+  const [newGoal, setNewGoal] = useState('');
+  const [latestMood, setLatestMood] = useState(null);
+  const animation = new Animated.Value(0);
 
-  // Carrega as metas do armazenamento ao iniciar o aplicativo
   useEffect(() => {
     loadGoals();
+    loadLatestMood();
   }, []);
 
   const loadGoals = async () => {
@@ -24,6 +27,18 @@ const DailyGoalsScreen = ({ navigation, route }) => {
       }
     } catch (error) {
       console.error("Erro ao carregar metas", error);
+    }
+  };
+
+  const loadLatestMood = async () => {
+    try {
+      const storedMoodHistory = await AsyncStorage.getItem('moodHistory');
+      if (storedMoodHistory) {
+        const moodHistory = JSON.parse(storedMoodHistory);
+        setLatestMood(moodHistory[moodHistory.length - 1]);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar o humor", error);
     }
   };
 
@@ -47,18 +62,57 @@ const DailyGoalsScreen = ({ navigation, route }) => {
     if (newGoal.trim() && filter) {
       const updatedGoals = [...goals, { text: newGoal, priority: filter }];
       setGoals(updatedGoals);
-      saveGoals(updatedGoals); // Salva as metas no AsyncStorage
+      saveGoals(updatedGoals);
       setNewGoal('');
+      
+      Animated.sequence([
+        Animated.timing(animation, { toValue: 1, duration: 200, easing: Easing.ease, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 0, duration: 200, easing: Easing.ease, useNativeDriver: true })
+      ]).start();
     }
   };
+
+  const deleteGoal = (index) => {
+    const updatedGoals = goals.filter((_, i) => i !== index);
+    setGoals(updatedGoals);
+    saveGoals(updatedGoals);
+  };
+
+  const progress = totalTasks ? (completedTasks / totalTasks) * 100 : 0;
+
+  const pieData = [
+    {
+      name: "Concluídas",
+      tasks: completedTasks,
+      color: "#50fa7b",
+      legendFontColor: "#333",
+      legendFontSize: 14
+    },
+    {
+      name: "Pendentes",
+      tasks: totalTasks - completedTasks,
+      color: "#E94F4F",
+      legendFontColor: "#333",
+      legendFontSize: 14
+    }
+  ];
 
   return (
     <Container>
       <Title>Objetivos do Dia</Title>
 
+      {latestMood && (
+        <CompactMoodCard>
+          <MoodEmoji>{latestMood.mood}</MoodEmoji>
+          <MoodInfo>
+            <MoodDate>{latestMood.date}</MoodDate>
+            <MoodNote>{latestMood.note}</MoodNote>
+          </MoodInfo>
+        </CompactMoodCard>
+      )}
+
       <ProgressIndicator totalTasks={totalTasks} completedTasks={completedTasks} />
 
-      {/* Filtro de Prioridade */}
       <FilterContainer>
         {['Alta', 'Média', 'Baixa'].map((priority) => (
           <FilterTag
@@ -67,12 +121,16 @@ const DailyGoalsScreen = ({ navigation, route }) => {
             isSelected={filter === priority}
             onPress={() => setFilter(filter === priority ? null : priority)}
           >
+            <Ionicons
+              name={priority === 'Alta' ? 'arrow-up-circle' : priority === 'Média' ? 'remove-circle' : 'arrow-down-circle'}
+              size={20}
+              color={filter === priority ? '#1C2541' : '#fff'}
+            />
             <FilterTagText isSelected={filter === priority}>{priority}</FilterTagText>
           </FilterTag>
         ))}
       </FilterContainer>
 
-      {/* Campo de Adição de Metas */}
       {filter && (
         <AddGoalContainer>
           <GoalInput
@@ -87,7 +145,6 @@ const DailyGoalsScreen = ({ navigation, route }) => {
         </AddGoalContainer>
       )}
 
-      {/* Lista de Metas */}
       <GoalList>
         {goals
           .filter((goal) => (filter ? goal.priority === filter : true))
@@ -95,11 +152,13 @@ const DailyGoalsScreen = ({ navigation, route }) => {
             <GoalItem key={index}>
               <GoalText>{goal.text}</GoalText>
               <PriorityTag priority={goal.priority} />
+              <DeleteButton onPress={() => deleteGoal(index)}>
+                <Ionicons name="trash" size={24} color="#fff" />
+              </DeleteButton>
             </GoalItem>
           ))}
       </GoalList>
 
-      {/* Botão e Modal do Relatório */}
       <HomeButton onPress={() => navigation.navigate('HomeTabs', { screen: 'Home' })}>
         <Ionicons name="arrow-back" size={28} color="#fff" />
       </HomeButton>
@@ -112,9 +171,32 @@ const DailyGoalsScreen = ({ navigation, route }) => {
         <ModalContainer>
           <ModalContent>
             <ReportTitle>Relatório do Dia</ReportTitle>
-            <ReportText>Tarefas Totais: {totalTasks}</ReportText>
-            <ReportText>Tarefas Concluídas: {completedTasks}</ReportText>
-            <ReportText>Tarefas Pendentes: {totalTasks - completedTasks}</ReportText>
+
+            <PieChart
+              data={pieData}
+              width={300}
+              height={200}
+              chartConfig={{
+                color: (opacity = 1) => `rgba(26, 255, 146, ${opacity})`,
+              }}
+              accessor={"tasks"}
+              backgroundColor={"transparent"}
+              paddingLeft={"15"}
+              absolute
+            />
+
+            {/* Exibição do Humor no Relatório com Estilo Criativo */}
+            {latestMood && (
+              <MoodReportCard>
+                <MoodReportEmoji>{latestMood.mood}</MoodReportEmoji>
+                <MoodReportDetails>
+                  <MoodReportTitle>Humor do Dia</MoodReportTitle>
+                  <MoodReportNote>"{latestMood.note}"</MoodReportNote>
+                  <MoodReportDate>{latestMood.date}</MoodReportDate>
+                </MoodReportDetails>
+              </MoodReportCard>
+            )}
+
             <CloseButton onPress={closeReport}>
               <CloseButtonText>Fechar Relatório</CloseButtonText>
             </CloseButton>
@@ -140,6 +222,79 @@ const Title = styled.Text`
   text-align: center;
   margin-top: 20px;
   margin-bottom: 20px;
+`;
+
+const CompactMoodCard = styled.View`
+  background-color: #f0f0f0;
+  padding: 12px;
+  border-radius: 12px;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 15px;
+  shadow-color: #000;
+  shadow-offset: 0px 2px;
+  shadow-opacity: 0.2;
+  shadow-radius: 4px;
+  elevation: 3;
+`;
+
+const MoodEmoji = styled.Text`
+  font-size: 32px;
+  margin-right: 12px;
+`;
+
+const MoodInfo = styled.View`
+  flex: 1;
+`;
+
+const MoodDate = styled.Text`
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 4px;
+`;
+
+const MoodNote = styled.Text`
+  font-size: 14px;
+  color: #333;
+`;
+
+const MoodReportCard = styled.View`
+  background-color: #E0F7FA;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+  align-items: center;
+  justify-content: center;
+`;
+
+const MoodReportEmoji = styled.Text`
+  font-size: 50px;
+  margin-bottom: 10px;
+`;
+
+const MoodReportDetails = styled.View`
+  align-items: center;
+`;
+
+const MoodReportTitle = styled.Text`
+  font-size: 18px;
+  font-weight: bold;
+  color: #00796B;
+  margin-bottom: 5px;
+`;
+
+const MoodReportNote = styled.Text`
+  font-size: 16px;
+  font-style: italic;
+  color: #004D40;
+  margin-bottom: 8px;
+  text-align: center;
+  padding-horizontal: 10px;
+`;
+
+const MoodReportDate = styled.Text`
+  font-size: 14px;
+  color: #00796B;
 `;
 
 const ProgressIndicator = ({ totalTasks, completedTasks }) => {
@@ -171,6 +326,7 @@ const GoalItem = styled.View`
 const GoalText = styled.Text`
   font-size: 18px;
   color: #F5F5F5;
+  flex: 1;
 `;
 
 const PriorityTag = styled.View`
@@ -179,6 +335,11 @@ const PriorityTag = styled.View`
   width: 18px;
   height: 18px;
   border-radius: 9px;
+  margin-right: 10px;
+`;
+
+const DeleteButton = styled.TouchableOpacity`
+  padding: 5px;
 `;
 
 const ProgressContainer = styled.View`
@@ -214,7 +375,8 @@ const FilterTag = styled.TouchableOpacity`
         : '#50fa7b'
       : '#44475a'};
   border-radius: 30px;
-  margin-horizontal: 5px;
+  flex-direction: row;
+  align-items: center;
   shadow-color: #000;
   shadow-opacity: 0.2;
   shadow-radius: 6px;
@@ -225,6 +387,7 @@ const FilterTagText = styled.Text`
   color: ${({ isSelected }) => (isSelected ? '#1C2541' : '#fff')};
   font-weight: bold;
   font-size: 16px;
+  margin-left: 8px;
 `;
 
 const AddGoalContainer = styled.View`
