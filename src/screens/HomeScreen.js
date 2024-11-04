@@ -5,11 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons'; // For icons
 import ActionSheet from 'react-native-actions-sheet'; // For slide-up panel
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+
 
 const initialTasks = [
-  { id: '1', title: 'Buy groceries', completed: false, createdAt: new Date(), deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
+   /* { id: '1', title: 'Buy groceries', completed: false, createdAt: new Date(), deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
   { id: '2', title: 'Finish project', completed: false, createdAt: new Date(), deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
-  { id: '3', title: 'Call John', completed: false, createdAt: new Date(), deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
+  { id: '3', title: 'Call John', completed: false, createdAt: new Date(), deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) }, */ 
 ];
 
 const quotes = [
@@ -30,13 +32,23 @@ export default function HomeScreen({ navigation, route }) {
   const actionSheetRef = useRef(null);
   const [name, setName] = useState('');
   const [profileImage, setProfileImage] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date()); // Para armazenar a data escolhida
+  const [showDatePicker, setShowDatePicker] = useState(false);  // Para controlar a exibição do DatePicker
+
+  const onDateChange = (event, date) => {
+    setShowDatePicker(false); // Oculta o DatePicker após a seleção
+    if (date) {
+      setSelectedDate(date); // Define a data escolhida
+    }
+  };
+
 
   useFocusEffect(
     useCallback(() => {
       const loadProfileData = async () => {
         const storedName = await AsyncStorage.getItem('name');
         const storedImage = await AsyncStorage.getItem('profileImage');
-        
+
         if (storedName) setName(storedName);
         if (storedImage) setProfileImage(storedImage);
       };
@@ -65,7 +77,7 @@ export default function HomeScreen({ navigation, route }) {
 
   const handleAddTask = () => {
     if (newTaskTitle.trim() === '') {
-      Alert.alert('Error', 'Task title cannot be empty.');
+      Alert.alert('Erro', 'O título da tarefa não pode estar vazio.');
       return;
     }
 
@@ -74,15 +86,16 @@ export default function HomeScreen({ navigation, route }) {
       title: newTaskTitle,
       completed: false,
       createdAt: new Date(),
-      deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      deadline: selectedDate, // Adiciona a data de vencimento escolhida
     };
 
     const updatedTasks = [...tasks, newTask];
     setTasks(updatedTasks);
-    saveTasks(updatedTasks);
+    saveTasks(updatedTasks); // Salva no AsyncStorage
     setNewTaskTitle('');
+    setSelectedDate(new Date()); // Reseta a data após salvar
     setModalVisible(false);
-    Alert.alert('Tarefa Adicionada', `A tarefa "${newTaskTitle}" foi adicionada.`);
+    Alert.alert('Tarefa Adicionada', `A tarefa "${newTaskTitle}" foi adicionada com sucesso.`);
   };
 
   // Função handleLongPress para excluir a tarefa com confirmação
@@ -199,15 +212,21 @@ export default function HomeScreen({ navigation, route }) {
         </ButtonRow>
       </View>
 
-      <View style={{ height: 225 }}>
+      <View style={{ height: 270 }}>
         <FlatList
-          data={sortedTasks}
+          data={sortedTasks} // Supondo que 'sortedTasks' já está definido como a lista ordenada
           renderItem={({ item }) => (
             <TaskItem
               completed={item.completed}
               onLongPress={() => handleLongPress(item.id)} // Aplica a função de long press para excluir
             >
-              <TaskTitle>{item.title}</TaskTitle>
+              <View>
+                <TaskTitle>{item.title}</TaskTitle>
+                {/* Exibe a data de vencimento da tarefa */}
+                <TaskDeadline>{item.deadline.toLocaleDateString()}</TaskDeadline>
+              </View>
+
+              {/* Botão de conclusão */}
               <TouchableOpacity onPress={() => handleCompleteTask(item.id)}>
                 <Ionicons
                   name={item.completed ? "checkmark-circle" : "checkmark-circle-outline"}
@@ -220,6 +239,7 @@ export default function HomeScreen({ navigation, route }) {
           keyExtractor={(item) => item.id}
         />
       </View>
+
 
       <AddTaskButton onPress={() => setModalVisible(true)}>
         <Ionicons name="add" size={28} color="#fff" />
@@ -238,6 +258,20 @@ export default function HomeScreen({ navigation, route }) {
               onChangeText={setNewTaskTitle}
               placeholderTextColor="#aaa"
             />
+            <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ marginVertical: 10 }}>
+              <Text style={{ color: '#F5F5F5', fontSize: 16 }}>
+                Data de Vencimento: {selectedDate.toLocaleDateString()}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display="default"
+                onChange={onDateChange}  // Chama a função para definir a data
+              />
+            )}
             <ModalButton onPress={handleAddTask}>
               <ButtonText>Adicionar Tarefa</ButtonText>
             </ModalButton>
@@ -317,7 +351,7 @@ const ObjectiveButton = styled.TouchableOpacity`
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  padding: 50px;
+  padding: 25px;
   background-color: #1C2541;
   margin-bottom: 5px;
   margin-top: 5px;
@@ -380,9 +414,21 @@ const TaskItem = styled.TouchableOpacity`
 
 const TaskTitle = styled.Text`
   font-size: 18px;
+  font-weight: bold;
   color: #1C2541;
-  flex: 1;
 `;
+
+const TaskDeadline = styled.Text`
+  font-size: 12px;
+  color: #000;
+  background-color: #FFB6B9;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-top: 4px;
+  align-self: flex-start;
+`;
+
 
 const AddTaskButton = styled.TouchableOpacity`
   background-color: #1C2541;
@@ -444,5 +490,3 @@ const ModalButton = styled.TouchableOpacity`
   align-items: center;
   margin-bottom: 10px;
 `;
-
-
