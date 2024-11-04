@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Alert, ScrollView, Animated, Easing } from 'react-native';
 import styled from 'styled-components/native';
-import { Audio } from 'expo-av'; // Importação do pacote expo-av
+import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function MoodDiaryScreen({ navigation }) {
   const [mood, setMood] = useState('');
@@ -10,28 +11,47 @@ export default function MoodDiaryScreen({ navigation }) {
   const [animation] = useState(new Animated.Value(1));
   const [sound, setSound] = useState();
 
-  // Função para carregar e tocar o som
+  useEffect(() => {
+    const loadMoodHistory = async () => {
+      try {
+        const storedMoodHistory = await AsyncStorage.getItem('moodHistory');
+        if (storedMoodHistory) {
+          setMoodHistory(JSON.parse(storedMoodHistory));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar o histórico de humor", error);
+      }
+    };
+    loadMoodHistory();
+  }, []);
+
   async function playSound() {
     const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/som/success.mp3') // Adicione o caminho do seu arquivo de áudio aqui
+      require('../../assets/som/success.mp3')
     );
     setSound(sound);
     await sound.playAsync();
   }
 
-  // Descarregar o som quando o componente for desmontado
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync(); // Libera a memória do som quando o componente for desmontado
-        }
-      : undefined;
-  }, [sound]);
+  const handleSaveMood = async () => {
+    const today = new Date().toLocaleDateString();
+    
+    // Verifica se já existe uma entrada para o dia de hoje
+    if (moodHistory.some(entry => entry.date === today)) {
+      Alert.alert("Humor já registrado", "Você já registrou seu humor hoje.");
+      return;
+    }
 
-  const handleSaveMood = () => {
     if (mood && note) {
-      const newEntry = { mood, note, date: new Date().toLocaleDateString() };
-      setMoodHistory([...moodHistory, newEntry]);
+      const newEntry = { mood, note, date: today };
+      const updatedMoodHistory = [...moodHistory, newEntry];
+      setMoodHistory(updatedMoodHistory);
+
+      try {
+        await AsyncStorage.setItem('moodHistory', JSON.stringify(updatedMoodHistory));
+      } catch (error) {
+        console.error("Erro ao salvar histórico de humor", error);
+      }
 
       Animated.sequence([
         Animated.timing(animation, {
@@ -48,8 +68,7 @@ export default function MoodDiaryScreen({ navigation }) {
         }),
       ]).start();
 
-      playSound(); // Toca o som ao salvar
-
+      playSound();
       Alert.alert('Humor Salvo', `Humor "${mood}" foi salvo com sucesso.`);
       setMood('');
       setNote('');
@@ -113,9 +132,10 @@ export default function MoodDiaryScreen({ navigation }) {
   );
 }
 
+// Estilos dos Componentes (mantidos como estão)
 const Container = styled.View`
   flex: 1;
-  background-color: #3A506B; /* Cor de fundo pastel escura */
+  background-color: #3A506B;
   padding: 16px;
 `;
 
