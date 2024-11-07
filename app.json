@@ -1,27 +1,26 @@
 {
   "expo": {
-    "name": "productivity-app",
-    "slug": "productivity-app",
+    "name": "Produfy",
+    "slug": "produfy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/app-logo-removebg.png",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/app-logo-removebg.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#3A506B"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/app-logo-removebg.png",
+        "backgroundColor": "#3A506B"
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/app-logo-removebg.png"
     }
   }
 }
